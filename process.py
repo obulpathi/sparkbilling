@@ -1,3 +1,5 @@
+from pyspark import SparkContext, SparkConf
+
 def loadLogs(line):
     text = StringIO.StringIO(line)
     domain = ""

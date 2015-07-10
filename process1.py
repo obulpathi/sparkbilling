@@ -1,8 +1,10 @@
+from pyspark import SparkContext
+
 def loadLogs(line):
     text = StringIO.StringIO(line)
     domain = ""
     fields = text.split("\t")
-    join coutry here
+    join country here
     return (domain, fields)
 
 def joinCountry():
@@ -19,12 +21,11 @@ def formatLogLine(record):
     return (m.group(1), tokens)
 
 def process(master, input_container, output_container):
-    sc = sc.SparkContext(master, "CDNBilling")
-    countryMap = sc.broadcast(loadCountryMap())
+    sc = SparkContext(master, "CDNBilling")
 
     # Anantha
-    country_map = load as broadcast variables
-    domain_map = load domains map
+    countryMap = sc.broadcast(sc.textFile(input_container + "/country_map.tsv"))
+    domainMap = sc.textFile(input_container + "/domain_map.tsv")
 
     # load logs
     logsRDD = sc.textFile("sample.log")
@@ -36,7 +37,7 @@ def process(master, input_container, output_container):
 
 
 
-    domainsRDD.foreach(myprint)
+    domainMap.foreach(myprint)
     # Obulpathi
     aggregatedLogs = domainLogs.reduceByKey(accumalator)
 
