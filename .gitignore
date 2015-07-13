@@ -57,3 +57,6 @@ target/
 
 # log files
 *.gz
+
+# output files
+output*
