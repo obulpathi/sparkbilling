@@ -1,3 +1,6 @@
+from pyspark import SparkContext
+import re
+
 def myprint(text):
     print(text)
 
@@ -40,19 +43,22 @@ def mergeCombiners((domain, bw1), (domain1, bw2)):
         bw1[region] = bw1[region] + bw2[region]
     return (domain, bw1)
 
-def process():
+def process(master, input_container, output_container):
+    sc = SparkContext(master, "CDNBilling")
+
     import re
 
     # load broadcast variables
-    countryMap = sc.broadcast(loadCountryMap())
+    countryMapRDD = sc.textFile(input_container + "/country_map.tsv")
+    countryMap = sc.broadcast(countryMapRDD.collect())
 
     # load domainLogs
-    domainsRawRDD = sc.textFile("domains_map.tsv")
+    domainsRawRDD = sc.textFile(input_container + "/domains_map.tsv")
     domainsRDD = domainsRawRDD.map(formatDomainsLine)
     # join the two above lines into one using wholeFilesRDD?
 
     # load logs
-    logsRDD = sc.textFile("raxcdn*.gz")
+    logsRDD = sc.textFile(input_container + "/raxcdn*.gz")
     # drop the header
     filteredRDD = logsRDD.filter(lambda x: x[0] != '#')
     # the above two steps can be optimized into a single step using
