@@ -7,9 +7,6 @@ def loadLogs(line):
     join country here
     return (domain, fields)
 
-def joinCountry():
-    pass
-
 def myprint(text):
     print(text)
 
@@ -50,7 +47,7 @@ def mergeCombiners((domain, bw1), (domain1, bw2)):
         bw1[region] = bw1[region] + bw2[region]
     return (domain, bw1)
 
-def process(master, input_container, output_container):
+def process():
     import re
 
     # load broadcast variables
@@ -78,3 +75,6 @@ def process(master, input_container, output_container):
     joinedLogs.saveAstextFile(output_contianer)
 
     sc.stop()
+
+if __name__ == "__main__":
+    process()
