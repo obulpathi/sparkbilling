@@ -12,7 +12,7 @@ def formatLogLine(record):
 
 def formatDomainsLine(record):
     tokens = record.split("\t")
-    return (tokens[0], (tokens[1], tokens[2], tokens[3]))
+    return (tokens[0], (tokens[1], tokens[3], tokens[2]))
 
 # create a combiner
 def createCombiner((domain, region, bandwidth)):
