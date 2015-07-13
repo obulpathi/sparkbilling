@@ -1,28 +1,71 @@
-from pyspark import SparkContext, SparkConf
+def myprint(text):
+    print(text)
 
-def loadLogs(line):
-    text = StringIO.StringIO(line)
-    domain = ""
-    fields = text.split("\t")
-    join coutry here
-    return (domain, fields)
--------------------------------------------------------
-def joinCountry():
-    pass
+def formatLogLine(record):
+    tokens = record.split("\t")
+    url = tokens[4]
+    m = re.search('/(.+?).raxcdn.com/', url)
+    domain = m.group(1)
+    bandwidth = tokens[6]
+    region = countryMap.value[tokens[11]]
+    return (domain, (domain, region, int(bandwidth)))
 
-def process(master, input_container, output_container):
-    sc = SparkContext(master, "CDNBilling")
+def formatDomainsLine(record):
+    tokens = record.split("\t")
+    return (tokens[0], (tokens[1], tokens[2], tokens[3]))
 
-    country_map = load as broadcast variables
-    domain_map = load domains map
+# create a combiner
+def createCombiner((domain, region, bandwidth)):
+    bw = {
+        "EMEA": 0,
+        "APAC": 0,
+        "North America": 0,
+        "South America": 0,
+        "Japan": 0,
+        "India": 0
+    }
+    bw[region] = bandwidth
+    return (domain, bw)
 
-    logs = sc.TextFile(gradesFileName)
-    domainLogs = logs.map(loadLogs)
-    --------------------------------------------------
-    aggregatedLogs = domainLogs.reduceByKey(accumalator)
+# merge a value
+def mergeValue((domain, bw), (domain1, region, bandwidth)):
+    bw[region] = bw[region] + bandwidth
+    return (domain, bw)
 
-    joinedLogs = aggregaredLogs.join()
+# merge two combiners: domain = domain1
+def mergeCombiners((domain, bw1), (domain1, bw2)):
+    for region in bw1:
+        bw1[region] = bw1[region] + bw2[region]
+    return (domain, bw1)
 
-    joinedLogs.saveAstextFile(output_contianer)
+def process():
+    import re
+
+    # load broadcast variables
+    countryMap = sc.broadcast(loadCountryMap())
+
+    # load domainLogs
+    domainsRawRDD = sc.textFile("domains_map.tsv")
+    domainsRDD = domainsRawRDD.map(formatDomainsLine)
+    # join the two above lines into one using wholeFilesRDD?
+
+    # load logs
+    logsRDD = sc.textFile("sample.log")
+    # drop the header
+    filteredRDD = logsRDD.filter(lambda x: x[0] != '#')
+    # the above two steps can be optimized into a single step using
+    # wholeFilesRDD?
+    # format the data
+    formattedRDD = filteredRDD.map(formatLogLine, countryMap)
+    # for each domain, calculate bandwidth and request count
+    aggregatedLogs = formattedRDD.combineByKey(createCombiner, mergeValue, mergeCombiners)
+
+    # join the usage logs with domains map
+    joinedLogs = aggregatedLogs.join(domainsRDD)
+    # save the output
+    joinedLogs.saveAsTextFile("output")
 
     sc.stop()
+
+if __name__ == "__main__":
+    process()
