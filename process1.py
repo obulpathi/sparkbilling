@@ -1,12 +1,3 @@
-from pyspark import SparkContext
-
-def loadLogs(line):
-    text = StringIO.StringIO(line)
-    domain = ""
-    fields = text.split("\t")
-    join country here
-    return (domain, fields)
-
 def myprint(text):
     print(text)
 
@@ -72,7 +63,7 @@ def process():
     # join the usage logs with domains map
     joinedLogs = aggregatedLogs.join(domainsRDD)
     # save the output
-    joinedLogs.saveAstextFile(output_contianer)
+    joinedLogs.saveAsTextFile("output")
 
     sc.stop()
 
