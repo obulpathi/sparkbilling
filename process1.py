@@ -22,6 +22,10 @@ def formatLogLine(record):
     region = countryMap.value[tokens[11]]
     return (domain, (domain, region, int(bandwidth)))
 
+def formatDomainsLine(record):
+    tokens = record.split("\t")
+    return (tokens[0], (tokens[1], tokens[2], tokens[3]))
+
 # create a combiner
 def createCombiner((domain, region, bandwidth)):
     bw = {
@@ -60,15 +64,23 @@ def process(master, input_container, output_container):
     logsRDD = sc.textFile("sample.log")
     # drop the header
     filteredRDD = logsRDD.filter(lambda x: x[0] != '#')
+    # the above two steps can be optimized into a single step using
+    # wholeFilesRDD?
     # format the data
     formattedRDD = filteredRDD.map(formatLogLine, countryMap)
     # for each domain, calculate bandwidth and request count
     aggregatedLogs = formattedRDD.combineByKey(createCombiner, mergeValue, mergeCombiners)
     # print the data
     aggregatedLogs.foreach(myprint)
+    # (u'www.davidbartosh.com', (u'www.davidbartosh.com', {'India': 0, 'EMEA': 0, 'APAC': 0, 'North America': 21117, 'South America': 0, 'Japan': 0}))
+    # load domainLogs
+    domainsRawRDD = sc.textFile("domains_map.tsv")
+    domainsRDD = domainsRawRDD.map(formatDomainsLine)
+    # join the two above lines into one using wholeFilesRDD?
 
-    joinedLogs = aggregaredLogs.join()
-
+    # join the usage logs with domains map
+    joinedLogs = aggregatedLogs.join(domainsRDD)
+    # save the output
     joinedLogs.saveAstextFile(output_contianer)
 
     sc.stop()
