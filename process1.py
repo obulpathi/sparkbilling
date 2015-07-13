@@ -56,9 +56,10 @@ def process(master, input_container, output_container):
     # load broadcast variables
     countryMap = sc.broadcast(loadCountryMap())
 
-    # load domain map: Ananta
-    domain_map = load domains map
-    # domainMap.foreach(myprint)
+    # load domainLogs
+    domainsRawRDD = sc.textFile("domains_map.tsv")
+    domainsRDD = domainsRawRDD.map(formatDomainsLine)
+    # join the two above lines into one using wholeFilesRDD?
 
     # load logs
     logsRDD = sc.textFile("sample.log")
@@ -70,13 +71,6 @@ def process(master, input_container, output_container):
     formattedRDD = filteredRDD.map(formatLogLine, countryMap)
     # for each domain, calculate bandwidth and request count
     aggregatedLogs = formattedRDD.combineByKey(createCombiner, mergeValue, mergeCombiners)
-    # print the data
-    aggregatedLogs.foreach(myprint)
-    # (u'www.davidbartosh.com', (u'www.davidbartosh.com', {'India': 0, 'EMEA': 0, 'APAC': 0, 'North America': 21117, 'South America': 0, 'Japan': 0}))
-    # load domainLogs
-    domainsRawRDD = sc.textFile("domains_map.tsv")
-    domainsRDD = domainsRawRDD.map(formatDomainsLine)
-    # join the two above lines into one using wholeFilesRDD?
 
     # join the usage logs with domains map
     joinedLogs = aggregatedLogs.join(domainsRDD)
