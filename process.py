@@ -49,8 +49,7 @@ def process(master, input_container, output_container):
     import re
 
     # load broadcast variables
-    countryMapRDD = sc.textFile(input_container + "/country_map.tsv")
-    countryMap = sc.broadcast(countryMapRDD.collect())
+    countryMap = sc.broadcast(loadCountryMap())
 
     # load domainLogs
     domainsRawRDD = sc.textFile(input_container + "/domains_map.tsv")
