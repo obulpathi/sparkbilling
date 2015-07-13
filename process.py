@@ -7,7 +7,7 @@ def formatLogLine(record):
     m = re.search('/(.+?).raxcdn.com/', url)
     domain = m.group(1)
     bandwidth = tokens[6]
-    region = countryMap.value[tokens[11]]
+    region = countryMap.value.get(tokens[11], 'None')
     return (domain, (domain, region, int(bandwidth)))
 
 def formatDomainsLine(record):
@@ -22,7 +22,9 @@ def createCombiner((domain, region, bandwidth)):
         "North America": 0,
         "South America": 0,
         "Japan": 0,
-        "India": 0
+        "India": 0,
+        "Australia": 0,
+        "None": 0
     }
     bw[region] = bandwidth
     return (domain, bw)
@@ -50,7 +52,7 @@ def process():
     # join the two above lines into one using wholeFilesRDD?
 
     # load logs
-    logsRDD = sc.textFile("sample.log")
+    logsRDD = sc.textFile("raxcdn*.gz")
     # drop the header
     filteredRDD = logsRDD.filter(lambda x: x[0] != '#')
     # the above two steps can be optimized into a single step using
