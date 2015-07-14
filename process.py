@@ -32,19 +32,21 @@ def createCombiner((domain, region, bandwidth)):
         "Australia": 0,
         "None": 0
     }
+    count = 1
     bw[region] = bandwidth
-    return (domain, bw)
+    return (domain, bw, count)
 
 # merge a value
-def mergeValue((domain, bw), (domain1, region, bandwidth)):
+def mergeValue((domain, bw, count), (domain1, region, bandwidth)):
     bw[region] = bw[region] + bandwidth
-    return (domain, bw)
+    count += 1
+    return (domain, bw, count)
 
 # merge two combiners: domain = domain1
-def mergeCombiners((domain, bw1), (domain1, bw2)):
+def mergeCombiners((domain, bw1, count1), (domain1, bw2, count2)):
     for region in bw1:
         bw1[region] = bw1[region] + bw2[region]
-    return (domain, bw1)
+    return (domain, bw1, count1 + count2)
 
 def createCountryDict(list):
     country_list = []
@@ -73,27 +75,29 @@ def process(master, input_container, output_container):
     # join the two above lines into one using wholeFilesRDD?
 
     # load logs
-    logsRDD = sc.textFile(input_container + "/raxcdn*.gz")
+    logsRDD = sc.textFile(input_container + "/raxcdn_*")
     # drop the header
     filteredRDD = logsRDD.filter(lambda x: x[0] != '#')
     # the above two steps can be optimized into a single step using
     # wholeFilesRDD?
+
     # format the data
     formattedRDD = filteredRDD.map(formatLogLine, countryMapDict)
+
     # for each domain, calculate bandwidth and request count
     aggregatedLogs = formattedRDD.combineByKey(createCombiner, mergeValue, mergeCombiners)
 
     # join the usage logs with domains map
     joinedLogs = aggregatedLogs.join(domainsRDD)
     # save the output
-    joinedLogs.saveAsTextFile(output_container + "/output")
+    joinedLogs.saveAsTextFile(output_container + "/output-files")
 
     sc.stop()
 
 if __name__ == "__main__":
-    ## Execution : $YOUR_SPARK_HOME/bin/spark-submit --master local[4] process.py
+    ## Execution : $SPARK_HOME/bin/spark-submit --master local[4] process.py
     input_container = "/home/nithya/spark-billing/sparkbilling"
-    output_container = "/home/nithya/spark-billing/sparkbilling"
+    output_container = "/home/nithya/spark-billing/sparkbilling/output"
     f = open(output_container + "/time_taken.txt", 'w')
     f.write("Start time: " + get_time() + "\n")
     process("local", input_container, output_container)
