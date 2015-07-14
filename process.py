@@ -7,6 +7,10 @@ countryMapDict = {}
 def myprint(text):
     print(text)
 
+def myprintlist(list):
+    for elem in list:
+        print elem
+
 def formatLogLine(record):
     tokens = record.split("\t")
     url = tokens[4]
@@ -57,8 +61,23 @@ def createCountryDict(list):
 
 def get_time():
     timestamp = time.time()
-    time_formatted = datetime.datetime.fromtimestamp(timestamp).strftime('%Y-%m-%d %H:%M:%S')
+    time_formatted = datetime.datetime.fromtimestamp(timestamp).strftime(
+        '%Y-%m-%d %H:%M:%S')
     return time_formatted
+
+def formatUnusedDomain((domain, value)):
+    bw = {
+        "EMEA": 0,
+        "APAC": 0,
+        "North America": 0,
+        "South America": 0,
+        "Japan": 0,
+        "India": 0,
+        "Australia": 0,
+        "None": 0
+    }
+    count = 0
+    return (domain, (domain, bw, count), value)
 
 def process(master, input_container, output_container):
     sc = SparkContext(master, "CDNBilling")
@@ -84,11 +103,17 @@ def process(master, input_container, output_container):
     # format the data
     formattedRDD = filteredRDD.map(formatLogLine, countryMapDict)
 
-    # for each domain, calculate bandwidth and request count
-    aggregatedLogs = formattedRDD.combineByKey(createCombiner, mergeValue, mergeCombiners)
+    # Zero event domains
+    domains_unused = domainsRDD.subtractByKey(formattedRDD)
+    domains_unused_formatted = domains_unused.map(formatUnusedDomain)
 
-    # join the usage logs with domains map
-    joinedLogs = aggregatedLogs.join(domainsRDD)
+    # for each domain, calculate bandwidth and request count
+    aggregatedLogs = formattedRDD.combineByKey(createCombiner, mergeValue,
+                                               mergeCombiners)
+
+    # join the usage logs with domains map including zero events
+    joinedLogs = aggregatedLogs.union(domains_unused_formatted)
+
     # save the output
     joinedLogs.saveAsTextFile(output_container + "/output-files")
 
