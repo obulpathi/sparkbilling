@@ -1,6 +1,9 @@
+# Execution : $SPARK_HOME/bin/spark-submit --master local[4] process.py /home/nithya/spark-billing/sparkbilling /home/nithya/spark-billing/sparkbilling/output
+
 from pyspark import SparkContext
 import re
 import time, datetime
+import sys
 
 countryMapDict = {}
 
@@ -11,13 +14,25 @@ def myprintlist(list):
     for elem in list:
         print elem
 
+# Apache Extended Log Format
+# date         time        ip          method  uri             status    bytes time_taken referer                                                                                              user_agent                                                                                                      cookie      Country
+# 2015-01-31	00:01:34	92.63.87.3	GET     /abc.raxcdn.com/	301	      399	0	       "http://alea-laconica.gr/wp-admin/admin-ajax.php?action=kbslider_show_image&img=../wp-config.php"	"Mozilla/5.0 (Windows NT 6.2; WOW64) AppleWebKit/535.11 (KHTML, like Gecko) Chrome/17.0.963.65 Safari/535.11"	"-"         "US"
+
 def formatLogLine(record):
-    tokens = record.split("\t")
-    url = tokens[4]
-    m = re.search('/(.+?).raxcdn.com/', url)
-    domain = m.group(1)
-    bandwidth = tokens[6]
-    region = countryMapDict.get(tokens[11], 'None')
+    try:
+        tokens = record.split("\t")
+        url = tokens[4]
+        m = re.search('/(.+?).raxcdn.com/', url)
+        domain = m.group(1)
+        bandwidth = tokens[6]
+        region = countryMapDict.get(tokens[11], 'None')
+    except Exception as e :
+        print "\n\nException:"
+        print str(e.message) + "\n\nRecord:\n"
+        print record.encode('utf-8')
+        domain = "Invalid/Error"
+        bandwidth = 0
+        region = "None"
     return (domain, (domain, region, int(bandwidth)))
 
 def formatDomainsLine(record):
@@ -91,14 +106,11 @@ def process(master, input_container, output_container):
     # load domainLogs
     domainsRawRDD = sc.textFile(input_container + "/domains_map.tsv")
     domainsRDD = domainsRawRDD.map(formatDomainsLine)
-    # join the two above lines into one using wholeFilesRDD?
 
     # load logs
     logsRDD = sc.textFile(input_container + "/raxcdn_*")
     # drop the header
     filteredRDD = logsRDD.filter(lambda x: x[0] != '#')
-    # the above two steps can be optimized into a single step using
-    # wholeFilesRDD?
 
     # format the data
     formattedRDD = filteredRDD.map(formatLogLine, countryMapDict)
@@ -119,13 +131,17 @@ def process(master, input_container, output_container):
 
     sc.stop()
 
-if __name__ == "__main__":
-    ## Execution : $SPARK_HOME/bin/spark-submit --master local[4] process.py
-    input_container = "/home/nithya/spark-billing/sparkbilling"
-    output_container = "/home/nithya/spark-billing/sparkbilling/output"
-    f = open(output_container + "/time_taken.txt", 'w')
-    f.write("Start time: " + get_time() + "\n")
-    process("local", input_container, output_container)
-    f.write("End time: " + get_time() + "\n")
-    f.close()
+def main(argv):
+    if len(argv) == 2:
+        input_container = argv[0]
+        output_container = argv[1]
+        f = open(output_container + "/time_taken.txt", 'w')
+        f.write("Start time: " + get_time() + "\n")
+        process("local", input_container, output_container)
+        f.write("End time: " + get_time() + "\n")
+        f.close()
+    else:
+        print ("Usage: spark-submit file.py input_container output_container")
 
+if __name__ == "__main__":
+    main(sys.argv[1:])
