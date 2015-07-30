@@ -1,22 +1,28 @@
-# Execution : $SPARK_HOME/bin/spark-submit --master local[4] process.py /home/nithya/spark-billing/sparkbilling /home/nithya/spark-billing/sparkbilling/output
+# Execution : $SPARK_HOME/bin/spark-submit --master local[4] process.py \
+# --input_container /home/nithya/spark-billing/sparkbilling/sample \
+# --output_container /home/nithya/spark-billing/sparkbilling/output \
+# --start_date 2015-03-30T12:00:00Z --end_date 2015-03-31T12:00:00Z
+
 
 from pyspark import SparkContext
+import argparse
+import datetime
 import re
-import time, datetime
+import time
 import sys
 
 countryMapDict = {}
+dateDict = {}
+
 
 def myprint(text):
     print(text)
+
 
 def myprintlist(list):
     for elem in list:
         print elem
 
-# Apache Extended Log Format
-# date         time        ip          method  uri             status    bytes time_taken referer                                                                                              user_agent                                                                                                      cookie      Country
-# 2015-01-31	00:01:34	92.63.87.3	GET     /abc.raxcdn.com/	301	      399	0	       "http://alea-laconica.gr/wp-admin/admin-ajax.php?action=kbslider_show_image&img=../wp-config.php"	"Mozilla/5.0 (Windows NT 6.2; WOW64) AppleWebKit/535.11 (KHTML, like Gecko) Chrome/17.0.963.65 Safari/535.11"	"-"         "US"
 
 def formatLogLine(record):
     try:
@@ -26,21 +32,23 @@ def formatLogLine(record):
         domain = m.group(1)
         bandwidth = tokens[6]
         region = countryMapDict.get(tokens[11], 'None')
-    except Exception as e :
+    except Exception as e:
         print "\n\nException:"
         print str(e.message) + "\n\nRecord:\n"
         print record.encode('utf-8')
         domain = "Invalid/Error"
         bandwidth = 0
         region = "None"
-    return (domain, (domain, region, int(bandwidth)))
+    return (domain, (region, int(bandwidth)))
+
 
 def formatDomainsLine(record):
     tokens = record.split("\t")
     return (tokens[0], (tokens[1], tokens[3], tokens[2]))
 
+
 # create a combiner
-def createCombiner((domain, region, bandwidth)):
+def createCombiner((region, bandwidth)):
     bw = {
         "EMEA": 0,
         "APAC": 0,
@@ -51,34 +59,58 @@ def createCombiner((domain, region, bandwidth)):
         "Australia": 0,
         "None": 0
     }
-    count = 1
+    request_count = {
+        "EMEA": 0,
+        "APAC": 0,
+        "North America": 0,
+        "South America": 0,
+        "Japan": 0,
+        "India": 0,
+        "Australia": 0,
+        "None": 0
+    }
     bw[region] = bandwidth
-    return (domain, bw, count)
+    request_count[region] = 1
+    return (bw, request_count)
+
 
 # merge a value
-def mergeValue((domain, bw, count), (domain1, region, bandwidth)):
+def mergeValue((bw, request_count), (region, bandwidth)):
     bw[region] = bw[region] + bandwidth
-    count += 1
-    return (domain, bw, count)
+    request_count[region] += 1
+    return (bw, request_count)
+
 
 # merge two combiners: domain = domain1
-def mergeCombiners((domain, bw1, count1), (domain1, bw2, count2)):
+def mergeCombiners((bw1, req_count1), (bw2, req_count2)):
     for region in bw1:
         bw1[region] = bw1[region] + bw2[region]
-    return (domain, bw1, count1 + count2)
+        req_count1[region] = req_count1[region] + req_count2[region]
+    return (bw1, req_count1)
+
 
 def createCountryDict(list):
     country_list = []
     for item in list:
         tokens = item.split("\t")
-        country_list.append((tokens[0],tokens[1]))
+        country_list.append((tokens[0], tokens[1]))
     return dict(country_list)
+
 
 def get_time():
     timestamp = time.time()
     time_formatted = datetime.datetime.fromtimestamp(timestamp).strftime(
         '%Y-%m-%d %H:%M:%S')
     return time_formatted
+
+
+def filterByDate(tuple):
+    tokens = tuple.split("\t")
+    date = datetime.datetime.strptime(tokens[0] + ":" + tokens[1],
+                                      '%Y-%m-%d:%X')
+    if dateDict['start_date'] <= date <= dateDict['end_date']:
+        return tuple
+
 
 def formatUnusedDomain((domain, value)):
     bw = {
@@ -91,8 +123,18 @@ def formatUnusedDomain((domain, value)):
         "Australia": 0,
         "None": 0
     }
-    count = 0
-    return (domain, (domain, bw, count), value)
+    request_count = {
+        "EMEA": 0,
+        "APAC": 0,
+        "North America": 0,
+        "South America": 0,
+        "Japan": 0,
+        "India": 0,
+        "Australia": 0,
+        "None": 0
+    }
+    return (domain, (domain, bw, request_count), value)
+
 
 def process(master, input_container, output_container):
     sc = SparkContext(master, "CDNBilling")
@@ -100,7 +142,7 @@ def process(master, input_container, output_container):
     # load broadcast variables
     countryMapRDD = sc.textFile(input_container + "/country_map.tsv")
     countryMapList = countryMapRDD.collect()
-    countryMap = sc.broadcast(countryMapList)
+    sc.broadcast(countryMapList)
     countryMapDict.update(createCountryDict(countryMapList))
 
     # load domainLogs
@@ -108,9 +150,12 @@ def process(master, input_container, output_container):
     domainsRDD = domainsRawRDD.map(formatDomainsLine)
 
     # load logs
-    logsRDD = sc.textFile(input_container + "/raxcdn_*")
+    logsRDD = sc.textFile(input_container + "/sample.log")
     # drop the header
-    filteredRDD = logsRDD.filter(lambda x: x[0] != '#')
+    actual_log_lines = logsRDD.filter(lambda x: x[0] != '#')
+
+    # filter by date
+    filteredRDD = actual_log_lines.filter(filterByDate)
 
     # format the data
     formattedRDD = filteredRDD.map(formatLogLine, countryMapDict)
@@ -131,17 +176,43 @@ def process(master, input_container, output_container):
 
     sc.stop()
 
+
 def main(argv):
-    if len(argv) == 2:
-        input_container = argv[0]
-        output_container = argv[1]
-        f = open(output_container + "/time_taken.txt", 'w')
-        f.write("Start time: " + get_time() + "\n")
-        process("local", input_container, output_container)
-        f.write("End time: " + get_time() + "\n")
-        f.close()
-    else:
-        print ("Usage: spark-submit file.py input_container output_container")
+    parser = argparse.ArgumentParser()
+    input_args = parser.add_argument_group('required named arguments')
+    input_args.add_argument("--input_container", "-i",
+                            help="Where the log files, domain map and "
+                                 "country map are stored.",
+                            required=True)
+    input_args.add_argument("--output_container", "-o",
+                            help="Where you want the output files to be "
+                                 "stored.",
+                            required=True)
+    input_args.add_argument("--start_date",
+                            help="The date starting from which logs should "
+                                 "be processed. Example "
+                                 "value:2015-12-01T14:00:00Z",
+                            required=True)
+    input_args.add_argument("--end_date",
+                            help="The date until which logs should be "
+                                 "processed. Example "
+                                 "value:2015-12-02T14:00:00Z",
+                            required=True)
+    args = parser.parse_args()
+
+    input_container = args.input_container
+    output_container = args.output_container
+    dateDict['start_date'] = datetime.datetime.strptime(args.start_date,
+                                                        '%Y-%m-%dT%XZ')
+    dateDict['end_date'] = datetime.datetime.strptime(args.end_date,
+                                                      '%Y-%m-%dT%XZ')
+
+    f = open(output_container + "/time_taken.txt", 'w')
+    f.write("Start time: " + get_time() + "\n")
+    process("local", input_container, output_container)
+    f.write("End time: " + get_time() + "\n")
+    f.close()
+
 
 if __name__ == "__main__":
     main(sys.argv[1:])
