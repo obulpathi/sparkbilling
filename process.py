@@ -150,7 +150,7 @@ def process(master, input_container, output_container):
     domainsRDD = domainsRawRDD.map(formatDomainsLine)
 
     # load logs
-    logsRDD = sc.textFile(input_container + "/sample.log")
+    logsRDD = sc.textFile(input_container + "/raxcdn_*.gz")
     # drop the header
     actual_log_lines = logsRDD.filter(lambda x: x[0] != '#')
 
@@ -168,8 +168,11 @@ def process(master, input_container, output_container):
     aggregatedLogs = formattedRDD.combineByKey(createCombiner, mergeValue,
                                                mergeCombiners)
 
+    # add type of domain, project-ID, service-ID
+    joinedWithDomainDetails = aggregatedLogs.join(domainsRDD)
+
     # join the usage logs with domains map including zero events
-    joinedLogs = aggregatedLogs.union(domains_unused_formatted)
+    joinedLogs = joinedWithDomainDetails.union(domains_unused_formatted)
 
     # save the output
     joinedLogs.saveAsTextFile(output_container + "/output-files")
