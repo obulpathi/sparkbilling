@@ -10,6 +10,7 @@ import datetime
 import re
 import time
 import sys
+import uuid
 
 countryMapDict = {}
 dateDict = {}
@@ -133,15 +134,16 @@ def formatUnusedDomain((domain, value)):
         "Australia": 0,
         "None": 0
     }
-    return (domain, (domain, bw, request_count), value)
+    return (domain, ((bw, request_count), value))
 
 
-def process(master, input_container, output_container):
+def process(master, input_container, output_container, start_date, end_date):
     sc = SparkContext(master, "CDNBilling")
 
     # load broadcast variables
     countryMapRDD = sc.textFile(input_container + "/country_map.tsv")
     countryMapList = countryMapRDD.collect()
+    # broadcast only possible for simple data structures (like a list)
     sc.broadcast(countryMapList)
     countryMapDict.update(createCountryDict(countryMapList))
 
@@ -150,7 +152,7 @@ def process(master, input_container, output_container):
     domainsRDD = domainsRawRDD.map(formatDomainsLine)
 
     # load logs
-    logsRDD = sc.textFile(input_container + "/raxcdn_*.gz")
+    logsRDD = sc.textFile(input_container + "/raxcdn*.gz")
     # drop the header
     actual_log_lines = logsRDD.filter(lambda x: x[0] != '#')
 
@@ -177,6 +179,32 @@ def process(master, input_container, output_container):
     # save the output
     joinedLogs.saveAsTextFile(output_container + "/output-files")
 
+    resultsList = joinedLogs.collect()
+
+    # Write to results file in required output format
+    fp = open(output_container + "/results.txt", 'w')
+    for item in resultsList:
+        domain_name = item[0]
+        bandwidthDict = item[1][0][0]
+        requestCountDict = item[1][0][1]
+        projectID = item[1][1][1]
+        sslType = item[1][1][2]
+        offerModel = "CDN"
+        for region in bandwidthDict:
+            fp.write("bandwidthOut\t" + str(
+                uuid.uuid1()) + "\t" + projectID + "\t" + str(
+                uuid.uuid1()) + "\t" + domain_name + "\t" + offerModel +
+                     "\t" + start_date + "\t" + end_date + "\t" + region +
+                     "\t" + sslType + "\t" + str(
+                bandwidthDict[region]) + "\n")
+        for region in requestCountDict:
+            fp.write("requestCount\t" + str(
+                uuid.uuid1()) + "\t" + projectID + "\t" + str(
+                uuid.uuid1()) + "\t" + domain_name + "\t" + offerModel +
+                     "\t" + start_date + "\t" + end_date + "\t" + region +
+                     "\t" + sslType + "\t" + str(
+                requestCountDict[region]) + "\n")
+    fp.close()
     sc.stop()
 
 
@@ -212,7 +240,8 @@ def main(argv):
 
     f = open(output_container + "/time_taken.txt", 'w')
     f.write("Start time: " + get_time() + "\n")
-    process("local", input_container, output_container)
+    process("local", input_container, output_container, args.start_date,
+            args.end_date)
     f.write("End time: " + get_time() + "\n")
     f.close()
 
