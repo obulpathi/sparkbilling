@@ -105,12 +105,12 @@ def get_time():
     return time_formatted
 
 
-def filterByDate(tuple):
-    tokens = tuple.split("\t")
+def filterByDate(item):
+    tokens = item.split("\t")
     date = datetime.datetime.strptime(tokens[0] + ":" + tokens[1],
                                       '%Y-%m-%d:%X')
     if dateDict['start_date'] <= date <= dateDict['end_date']:
-        return tuple
+        return item
 
 
 def formatUnusedDomain((domain, value)):
